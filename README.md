@@ -41,7 +41,7 @@ To create your own acoustic environment, please go and check the official tutria
 
 # Citation
 If you find this project to be useful for your research, please consider citing the paper.
-```sh
+```
 @inproceedings{lanacoustic,
   title={Acoustic Volume Rendering for Neural Impulse Response Fields},
   author={Lan, Zitong and Zheng, Chenhao and Zheng, Zhiwei and Zhao, Mingmin},
