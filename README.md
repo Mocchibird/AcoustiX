@@ -1,10 +1,10 @@
 # Sionna AcoustiX
-[[arXiv](https://arxiv.org/abs/2411.06307)] [[Website](https://zitonglan.github.io/project/avr/avr.html)] [[AVR Code](https://github.com/ZitongLan/AVR)] [[BibTex](#citation)] 
+[[arXiv](https://arxiv.org/abs/2411.06307)] [[Website](https://zitonglan.github.io/project/avr/avr.html)] [[AVR Code](https://github.com/penn-waves-lab/AVR)] [[BibTex](#citation)] 
 
 
-This is an **acoustic impulse response simulation platform** based on the [Sionna](https://github.com/NVlabs/sionna) ray tracing engine. This is used by the [NeurIPS'24 Paper Acoustic Volume Rendering for Neural Impulse Response Fields.]((https://arxiv.org/abs/2411.06307)).
+This is an **acoustic impulse response simulation platform** based on the [Sionna](https://github.com/NVlabs/sionna) ray tracing engine. This is used by the [NeurIPS'24 Paper Acoustic Volume Rendering for Neural Impulse Response Fields.]((https://arxiv.org/abs/2411.06307))
 
-This repo contains the Sionna ray tracing  engine, which is primarily for radio-frequency signal simulations. We modify the ray interactions with the environments to support Sionna for acosutic simulator and build **AcoustiX**
+This repo contains the Sionna ray tracing  engine, which is primarily for radio-frequency signal simulations. We modify the ray interactions with the environments to support Sionna for acosutic simulator and build **AcoustiX**.
 
 We are still working on this repo to make it more user-friendly. Stay tuned!
 
