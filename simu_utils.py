@@ -49,6 +49,11 @@ def load_cfg(config_file):
 
 
 def ir_kernel(x, frequency=100, decay=3, kernal_type='sinc'):
+    """ Impulse response kernel function, can config as 
+    1. sinc function: sinx/x
+    2. exponential cos decay function: cosx*exp(-x)
+    """
+
     if kernal_type == 'sinc':
         kernel_signal =  np.where(x == 0, 1.0, np.sin(frequency * np.pi * x) / (decay * frequency * np.pi * x))
     elif kernal_type == 'exp_cosine':
@@ -302,15 +307,19 @@ def plot_figure(ir_samples, rx_pos, tx_pos, rx_ori, tx_ori, fs):
         plt.suptitle(f"t60 = {t60}, C50 = {C50}")
 
         plt.subplot(221)
+        plt.title("Simulated impulse response")
         plt.plot(sampled_ir)
 
         plt.subplot(222)
+        plt.title("IR energy decay trend")
         plt.plot(energy)
 
         plt.subplot(223)
+        plt.title("Channel Impulse response")
         plt.plot(np.abs(fft_signal))
 
         plt.subplot(224)
+        plt.title("Position of both speaker and microphone")
         plt.scatter(rx_pos[:,0], rx_pos[:,1])
         plt.scatter(rx_pos[i,0], rx_pos[i,1], c='r', s=100)
         plt.quiver(rx_pos[i, 0], rx_pos[i, 1], rx_ori[i,0], rx_ori[i,1], angles='xy', scale_units='xy', scale=1, color='r', width=0.005)
@@ -321,7 +330,10 @@ def plot_figure(ir_samples, rx_pos, tx_pos, rx_ori, tx_ori, fs):
         plt.grid(True)
         plt.show()
 
+
 def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix):
+    """ Function to save the impulse response samples
+    """
     for i in range(ir_samples.shape[0]):
         ir = ir_samples[i,:]
         position_rx = rx_pos[i,:]
@@ -337,7 +349,10 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix):
                 orientation_tx=orientation_tx)
 
 
+
 def generate_rx_samples(n_random_samples, xyz_max, xyz_min):
+    """ Randomly generate the rx samples with in a xyz boundary
+    """
     x_flat = np.random.rand(n_random_samples) * (xyz_max[0] - xyz_min[0]) + xyz_min[0]
     y_flat = np.random.rand(n_random_samples) * (xyz_max[1] - xyz_min[1]) + xyz_min[1]
     z_flat = np.random.rand(n_random_samples) * (xyz_max[2] - xyz_min[2]) + xyz_min[2]
