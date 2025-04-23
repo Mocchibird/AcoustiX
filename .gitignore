@@ -2,3 +2,4 @@ scene/
 __pycache__/
 mi_scece/
 generate_bounding_box.ipynb
+extract_scene/Pomaria_2_int/pomaria_2_int/*

@@ -138,8 +138,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    xyz_min = [-3.5, -7.5, 1]
-    xyz_max = [0, 0, 1.8]
+    xyz_min = [-10 -10, -1]
+    xyz_max = [1, 10, 5]
 
     generate_scene_xml(scene=os.path.abspath(args.scene), xyz_min=xyz_min, xyz_max=xyz_max, volume_thres=args.volume_thres, bounding=args.bounding)
     print("XML file created successfully!")
