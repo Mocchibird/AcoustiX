@@ -7,6 +7,8 @@ from rapidfuzz import process
 import yaml
 import json
 
+import soundfile as sf
+
 
 # Import Sionna RT components
 from sionna.rt import load_scene, Transmitter, Receiver, PlanarArray, RadioMaterial, LambertianPattern
@@ -417,6 +419,34 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix):
                 position_tx=position_tx,
                 orientation_rx=orientation_rx,
                 orientation_tx=orientation_tx)
+
+def save_ir_raw(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, sample_rate=16000):
+    for i in range(ir_samples.shape[0]):
+        ir = ir_samples[i,:]
+        position_rx = rx_pos[i,:]
+        orientation_rx = rx_ori[i,:]
+        position_tx = tx_pos
+        orientation_tx = tx_ori
+        
+        folder_name = f"{prefix+i:06d}"
+        folder_path = os.path.join(save_path, folder_name)
+        os.makedirs(folder_path, exist_ok=True)
+
+        # Save RIR as rir.wav
+        rir_path = os.path.join(folder_path, 'rir.wav')
+        sf.write(rir_path, ir, sample_rate)
+
+        # Save rx position as rx_pos.txt
+        rx_pos_path = os.path.join(folder_path, 'rx_pos.txt')
+        with open(rx_pos_path, 'w') as f:
+            f.write(f"{position_rx[0]},{position_rx[1]},{position_rx[2]}\n")
+
+        # Save tx position and orientation as tx_pos.txt (x,y,z,ori_x,ori_y,ori_z)
+        tx_pos_path = os.path.join(folder_path, 'tx_pos.txt')
+        with open(tx_pos_path, 'w') as f:
+            f.write(f"{position_tx[0]},{position_tx[1]},{position_tx[2]},{orientation_tx[0]},{orientation_tx[1]},{orientation_tx[2]}\n")
+
+        
 
 
 

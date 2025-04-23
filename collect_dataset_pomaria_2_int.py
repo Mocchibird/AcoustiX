@@ -18,10 +18,11 @@ import json
 import numpy as np
 from tqdm import tqdm
 import yaml
-from simu_utils import ir_simulation, plot_figure, save_ir, load_cfg, generate_rx_samples, generate_rx_samples_path
+from simu_utils import ir_simulation, plot_figure, save_ir, load_cfg, generate_rx_samples, generate_rx_samples_path, save_ir_raw
 from shutil import copyfile
 import argparse
 import ast
+import soundfile as sf
 
 
 def parse_path(s):
@@ -184,4 +185,6 @@ if __name__ == '__main__':
 
 
             if save_data == True:                
-                save_ir(ir_samples=ir_time_all, rx_pos=rx_pos, rx_ori=rx_ori, tx_pos=tx_pos, tx_ori=tx_ori, save_path=output_path, prefix=prefix)
+                save_ir_raw(ir_samples=ir_time_all, rx_pos=rx_pos, tx_pos=tx_pos, rx_ori=rx_ori, tx_ori=tx_ori, save_path=output_path, prefix=prefix, sample_rate=simu_config['fs'])
+
+print("RIRs saved successfully!")

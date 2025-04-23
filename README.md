@@ -22,6 +22,7 @@ This repo contains the official implementation for AcoustiX.
 
 
 # Installation
+Python 3.10
 * install the sionna ray tracing package (we have modifyed the source code on sionna to support acoustic simulation)
 ```sh
 cd sionna
