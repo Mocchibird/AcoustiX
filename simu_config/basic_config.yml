@@ -1,14 +1,14 @@
 rt_config:
   max_depth: 10
   num_samples: 50000
-  los: true
-  reflection: true
-  diffraction: False
+  los: True
+  reflection: True
+  diffraction: True
   scattering: True
   scat_prob: 0.00001
 
 ir_config:
-  attn: 0.001
+  attn: 0.0001
   fs: 48000
   ir_len: 4800
   speed: 343.8

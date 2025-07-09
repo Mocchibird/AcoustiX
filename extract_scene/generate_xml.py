@@ -95,7 +95,7 @@ def generate_scene_xml(scene, xyz_min, xyz_max, volume_thres, bounding):
     """ Generate the XML files
     """
 
-    ply_files_path = os.path.join(scene, 'ply_files')
+    ply_files_path = os.path.join(scene, 'meshes')
     plt_files = os.path.join(ply_files_path, '*.ply')
     ply_files = glob.glob(plt_files)
 
@@ -138,8 +138,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    xyz_min = [-10 -10, -1]
-    xyz_max = [1, 10, 5]
+    xyz_min = [-10, -10, -10]
+    xyz_max = [10, 10, 10]
 
     generate_scene_xml(scene=os.path.abspath(args.scene), xyz_min=xyz_min, xyz_max=xyz_max, volume_thres=args.volume_thres, bounding=args.bounding)
     print("XML file created successfully!")

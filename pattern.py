@@ -34,21 +34,21 @@ class Pattern:
 
 def unit2angle(unit_ori):
     """transfer unit vector orientation to angle
-
     Parameters
     ----------
     unit_ori : np.array [n_vector, 3]
         unit orientations in xyz
-
     Returns
     -------
     angle_ori: np.array [n_vector, 2] in azimuth, elevation
-          
     """
-
-    azimuth = np.arctan2(unit_ori[...,1], unit_ori[...,0]) # in 0 ~ 2pi
-    elevation = np.pi/2 - np.arctan(unit_ori[...,2] / np.sqrt(unit_ori[...,0]**2 + unit_ori[...,1]**2)) # in 0 ~ pi
-
+    azimuth = np.arctan2(unit_ori[..., 1], unit_ori[..., 0])  # in 0 ~ 2pi
+    
+    # Safe division to avoid divide by zero
+    xy_norm = np.sqrt(unit_ori[..., 0]**2 + unit_ori[..., 1]**2)
+    xy_norm = np.where(xy_norm < 1e-10, 1e-10, xy_norm)  # Avoid division by zero
+    
+    elevation = np.pi/2 - np.arctan(unit_ori[..., 2] / xy_norm)  # in 0 ~ pi
     angle_ori = np.stack([azimuth, elevation], axis=-1)
     return angle_ori
 

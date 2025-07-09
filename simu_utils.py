@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 from rapidfuzz import process
 import yaml
 import json
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+import trimesh
 
 import soundfile as sf
 
@@ -18,6 +21,40 @@ from sionna import SPEED_OF_LIGHT, DIELECTRIC_PERMITTIVITY_VACUUM
 from ir_utils import compute_metric
 from pattern import Pattern
 
+
+def add_room_mesh(ax, ply_file, face_color="lightgrey", alpha=0.15):
+    """
+    Overlay a .ply mesh (triangles) on an existing Axes3D.
+
+    Parameters
+    ----------
+    ax        : matplotlib 3-D axis that already contains your RX/TX points
+    ply_file  : path to the .ply file (ASCII or binary)
+    face_color: any Matplotlib color
+    alpha     : 0 (transparent) .. 1 (opaque)
+    """
+    # 1) load mesh
+    room = trimesh.load(ply_file, force='mesh')   # vertices, faces
+
+    # 2) triangles → Poly3DCollection
+    triangles = room.vertices[room.faces]         # (F, 3, 3) array
+    coll = Poly3DCollection(triangles,
+                            facecolor=face_color,
+                            edgecolor="k",
+                            linewidth=0.1,
+                            alpha=alpha)
+    ax.add_collection3d(coll)
+
+    # 3) keep sensible axis limits
+    mins, maxs = room.bounds
+    ax.set_xlim(mins[0], maxs[0])
+    ax.set_ylim(mins[1], maxs[1])
+    ax.set_zlim(mins[2], maxs[2])
+    ax.set_box_aspect(maxs - mins)
+
+def sanitize_position(pos):
+    """Helper to convert position array into a filename-safe string"""
+    return '_'.join([f"{x:.2f}" for x in pos])
 
 
 def load_cfg(config_file):
@@ -58,8 +95,6 @@ def load_cfg(config_file):
    
     return simu_config
 
-
-
 def ir_kernel(x, frequency=100, decay=3, kernal_type='sinc'):
     """ Impulse response kernel function, can config as
     1. sinc function: sinx/x
@@ -75,15 +110,11 @@ def ir_kernel(x, frequency=100, decay=3, kernal_type='sinc'):
 
     return kernel_signal
 
-
-
 def calculate_reflection_coefficient(scene, reflect_coeff):
     imag_eta = (np.log(2 / (1-reflect_coeff) - 1) / 2) ** 2
     conductivity = imag_eta * 2 * np.pi * scene.frequency * DIELECTRIC_PERMITTIVITY_VACUUM    
    
     return conductivity
-
-
 
 def assign_material(scene, material_db):
     """ Assign acoustic material to the objects in the scene
@@ -128,9 +159,7 @@ def assign_material(scene, material_db):
                 pass
         else:
             obj.radio_material = wall
-   
-
-
+    
 def config_scene(scene_path):
     """ Config scene and tx and rx arrays
     """
@@ -148,8 +177,6 @@ def config_scene(scene_path):
 
 
     return scene
-
-
 
 def ir_simulation(scene_path, rx_pos, tx_pos, rx_ori, tx_ori, simu_config):
     """
@@ -357,19 +384,15 @@ def ir_simulation(scene_path, rx_pos, tx_pos, rx_ori, tx_ori, simu_config):
 
     return ir_samples, rx_pos, rx_ori
 
-
-
-
 def plot_figure(ir_samples, rx_pos, tx_pos, rx_ori, tx_ori, fs):
     for i in range(len(ir_samples)):
         sampled_ir = ir_samples[i]
         fft_signal = np.fft.fft(sampled_ir)
 
-
-        energy, t60, C50 = compute_metric(sampled_ir, fs)
+        energy, t60, C50, edt = compute_metric(sampled_ir, fs)
  
         plt.figure(figsize=(12,12))
-        plt.suptitle(f"t60 = {t60}, C50 = {C50}")
+        plt.suptitle(f"t60 = {t60}, C50 = {C50}, EDT = {edt}")
 
 
         plt.subplot(221)
@@ -395,194 +418,124 @@ def plot_figure(ir_samples, rx_pos, tx_pos, rx_ori, tx_ori, fs):
         plt.scatter(tx_pos[0], tx_pos[1], c='b',s=100)
         plt.quiver(tx_pos[0], tx_pos[1], tx_ori[0], tx_ori[1], angles='xy', scale_units='xy', scale=1, color='r', width=0.005)
 
-
+        plt.xlim(-3, 3)
+        plt.ylim(-3, 3)
         plt.axis("equal")
         plt.grid(True)
         plt.show()
 
+def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs):
+    """Function to save the impulse response samples"""
+    
+    # Ensure directory exists
+    rir_dir = os.path.join(save_path, 'RIR')
+    os.makedirs(rir_dir, exist_ok=True)
 
+    # Sanitize transmitter position for filename uniqueness
+    tx_tag = sanitize_position(tx_pos)
 
-def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix):
-    """ Function to save the impulse response samples
-    """
     for i in range(ir_samples.shape[0]):
-        ir = ir_samples[i,:]
-        position_rx = rx_pos[i,:]
-        orientation_rx = rx_ori[i,:]
+        ir = ir_samples[i, :]
+        position_rx = rx_pos[i, :]
+        orientation_rx = rx_ori[i, :]
         position_tx = tx_pos
         orientation_tx = tx_ori
 
 
-        np.savez(os.path.join(save_path, f'ir_{str(int(prefix+i)).zfill(6)}.npz'),
-                ir=ir,
-                position_rx=position_rx,
-                position_tx=position_tx,
-                orientation_rx=orientation_rx,
-                orientation_tx=orientation_tx)
+        energy, t60, C50, edt = compute_metric(ir, fs)
 
-def save_ir_raw(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, sample_rate=16000):
-    for i in range(ir_samples.shape[0]):
-        ir = ir_samples[i,:]
-        position_rx = rx_pos[i,:]
-        orientation_rx = rx_ori[i,:]
-        position_tx = tx_pos
-        orientation_tx = tx_ori
+        # Create unique filename
+        file_base = f"ir_{tx_tag}_{str(int(prefix+i)).zfill(6)}"
+        npz_path = os.path.join(rir_dir, f"{file_base}.npz")
+
+        # Save IR and metadata
+        np.savez(npz_path,
+                 ir=ir,
+                 position_rx=position_rx,
+                 position_tx=position_tx,
+                 orientation_rx=orientation_rx,
+                 orientation_tx=orientation_tx,
+                 energy=energy,
+                 t60=t60,
+                 C50=C50,
+                 edt=edt)
+
+        # Plotting
+        sampled_ir = ir
+        fft_signal = np.fft.fft(sampled_ir)
+
+        plt.figure(figsize=(12, 12))
+        plt.suptitle(f"t60 = {t60:.2f}, C50 = {C50:.2f}, EDT = {edt:.2f}")
+
+        plt.subplot(221)
+        plt.title("Simulated impulse response")
+        plt.plot(sampled_ir)
+
+        plt.subplot(222)
+        plt.title("IR energy decay trend")
+        plt.plot(energy)
+
+        plt.subplot(223)
+        plt.title("Channel Impulse response (FFT Magnitude)")
+        plt.plot(np.abs(fft_signal))
+
+        ax = plt.subplot(224, projection='3d')
+        ax.set_title("Room mesh + speaker + microphones")
+
+        # --- ❶  room geometry ------------------------------------------
+        add_room_mesh(ax, "./extract_scene/LRoom/meshes/LRoom.ply")        # ☜ overlay mesh
+
+        # ❷ All RXs (small black dots)
+        ax.scatter(rx_pos[:, 0], rx_pos[:, 1], rx_pos[:, 2], c="k", s=15)
         
-        folder_name = f"{prefix+i:06d}"
-        folder_path = os.path.join(save_path, folder_name)
-        os.makedirs(folder_path, exist_ok=True)
-
-        # Save RIR as rir.wav
-        rir_path = os.path.join(folder_path, 'rir.wav')
-        sf.write(rir_path, ir, sample_rate)
-
-        # Save rx position as rx_pos.txt
-        rx_pos_path = os.path.join(folder_path, 'rx_pos.txt')
-        with open(rx_pos_path, 'w') as f:
-            f.write(f"{position_rx[0]},{position_rx[1]},{position_rx[2]}\n")
-
-        # Save tx position and orientation as tx_pos.txt (x,y,z,ori_x,ori_y,ori_z)
-        tx_pos_path = os.path.join(folder_path, 'tx_pos.txt')
-        with open(tx_pos_path, 'w') as f:
-            f.write(f"{position_tx[0]},{position_tx[1]},{position_tx[2]},{orientation_tx[0]},{orientation_tx[1]},{orientation_tx[2]}\n")
-
+        # ❸ Highlight the **current** RX in red
+        ax.scatter(rx_pos[i, 0], rx_pos[i, 1], rx_pos[i, 2], c="r", s=80)
         
+        # ❹ TX in blue (already as you wanted)
+        ax.scatter(tx_pos[0], tx_pos[1], tx_pos[2], c="b", s=120)
+        
+        # ❺ Orientation arrows
+        ax.quiver(rx_pos[:, 0], rx_pos[:, 1], rx_pos[:, 2],
+                  rx_ori[:, 0], rx_ori[:, 1], rx_ori[:, 2],
+                  length=0.35, color="r", linewidth=0.5)
+        
+        ax.quiver(tx_pos[0], tx_pos[1], tx_pos[2],
+                  tx_ori[0], tx_ori[1], tx_ori[2],
+                  length=0.5, color="b")
+        
+        ax.view_init(elev=20, azim=135)
+        ax.grid(False)
 
+        plt.savefig(os.path.join(rir_dir, f"{file_base}.png"))
+        plt.close('all')
 
+def generate_rx_samples(n_random_samples, xyz_max, xyz_min):
+    """ Randomly generate the rx samples with in a xyz boundary """
+    x_flat = np.random.rand(n_random_samples) * (xyz_max[0] - xyz_min[0]) + xyz_min[0]
+    y_flat = np.random.rand(n_random_samples) * (xyz_max[1] - xyz_min[1]) + xyz_min[1]
+    z_flat = np.random.rand(n_random_samples) * (xyz_max[2] - xyz_min[2]) + xyz_min[2]
 
+    rx_pos = np.stack([x_flat, y_flat, z_flat], axis=-1)
+    rx_ori = np.random.randn(n_random_samples, 3)  # Random orientations
 
-# This should be added to simu_utils.py
-def generate_rx_samples(n_random_samples=10, boundaries=None, xyz_min=None, xyz_max=None):
-    """
-    Generate random receiver samples within specified boundaries.
-   
-    Args:
-        n_random_samples: Number of samples to generate
-        boundaries: List of boundary boxes, each with [min_point, max_point] where each point is [x,y,z]
-        xyz_min, xyz_max: Legacy parameters for backward compatibility
-       
-    Returns:
-        rx_pos: Generated positions
-        rx_ori: Generated orientations
-    """
-    # Initialize arrays to store results
-    rx_pos = np.zeros((n_random_samples, 3))
-    rx_ori = np.zeros((n_random_samples, 3))
-   
-    # Use legacy parameters if boundaries not provided
-    if boundaries is None and xyz_min is not None and xyz_max is not None:
-        boundaries = [[xyz_min, xyz_max]]
-   
-    # Calculate volumes for weighted sampling
-    volumes = []
-    for box in boundaries:
-        min_point, max_point = np.array(box[0]), np.array(box[1])
-        volumes.append(np.prod(max_point - min_point))
-    total_volume = sum(volumes)
-   
-    # Calculate samples per box proportional to volume
-    samples_per_box = [int(n_random_samples * vol / total_volume) for vol in volumes]
-    # Ensure we have exactly n_random_samples
-    samples_per_box[-1] += n_random_samples - sum(samples_per_box)
-   
-    # Generate samples for each box
-    index = 0
-    for i, box in enumerate(boundaries):
-        min_point, max_point = np.array(box[0]), np.array(box[1])
-        samples = samples_per_box[i]
-       
-        # Generate random positions within this box
-        for j in range(samples):
-            if index < n_random_samples:
-                # Random position within the box
-                rx_pos[index] = min_point + np.random.random(3) * (max_point - min_point)
-               
-                # Random orientation (normalized vector)
-                ori = np.random.randn(3)
-                rx_ori[index] = ori / np.linalg.norm(ori)
-               
-                index += 1
-   
     return rx_pos, rx_ori
 
+def generate_grid(xyz_min, xyz_max, grid_n, margin):
+    # Compute inner start/end for each axis
+    mins = np.array(xyz_min)
+    maxs = np.array(xyz_max)
+    starts = mins + margin
+    ends   = maxs - margin
 
-def generate_rx_samples_path(path_points, n_samples):
-    """
-    Generate receiver samples along a specified path.
+    # Build each axis with grid_n evenly spaced points
+    axes = [
+        np.linspace(starts[i], ends[i], grid_n)
+        for i in range(3)
+    ]
 
+    # Make the 3×3×3 mesh
+    xs, ys, zs = np.meshgrid(*axes, indexing="ij")
 
-    The path is defined by a list/array of coordinates [x, y, z].
-    The function interpolates along the line segments connecting each
-    waypoint in order to generate n_samples that are uniformly spaced
-    along the total path length. The orientation for each sample is computed
-    as the normalized vector (with z set to 0) pointing from the current sample
-    to the next sample. For the last sample, the orientation is set to be equal
-    to that of the previous sample.
-
-
-    Parameters:
-        path_points: array-like of shape (M,3)
-                     List of M waypoints that define the path.
-        n_samples: int
-                   Total number of samples to generate along the entire path.
-                   
-    Returns:
-        rx_pos: numpy.ndarray of shape (n_samples, 3)
-                The generated positions along the path.
-        rx_ori: numpy.ndarray of shape (n_samples, 3)
-                The generated orientations as horizontal unit vectors.
-    """
-    # Convert the path to a NumPy array.
-    path_points = np.array(path_points)
-    if path_points.shape[0] < 2:
-        raise ValueError("At least two points are required to define a path.")
-   
-    # Compute differences and segment distances.
-    seg_vecs = path_points[1:] - path_points[:-1]
-    seg_dists = np.linalg.norm(seg_vecs, axis=1)
-   
-    # Compute cumulative distance along the path. The first point is at distance 0.
-    cum_dist = np.concatenate(([0], np.cumsum(seg_dists)))
-    total_length = cum_dist[-1]
-   
-    # Uniformly spaced distances along the entire path.
-    target_dists = np.linspace(0, total_length, n_samples)
-   
-    rx_pos = np.zeros((n_samples, 3))
-   
-    # Interpolate positions along the path.
-    for i, d in enumerate(target_dists):
-        # Find which segment the distance d falls in.
-        seg_idx = np.searchsorted(cum_dist, d, side='right') - 1
-        # Clamp seg_idx to a valid segment index.
-        if seg_idx >= len(seg_vecs):
-            seg_idx = len(seg_vecs) - 1
-       
-        # Fractional distance along the segment.
-        if seg_dists[seg_idx] > 0:
-            t = (d - cum_dist[seg_idx]) / seg_dists[seg_idx]
-        else:
-            t = 0.0
-        # Linear interpolation between the segment's endpoints.
-        rx_pos[i] = path_points[seg_idx] + t * seg_vecs[seg_idx]
-   
-    # Compute orientations. For each sample (except the last),
-    # the orientation points from the current position to the next.
-    rx_ori = np.zeros((n_samples, 3))
-    for i in range(n_samples - 1):
-        diff = rx_pos[i+1] - rx_pos[i]
-        # Use only the horizontal (xy) components.
-        diff[2] = 0
-        norm = np.linalg.norm(diff)
-        if norm > 0:
-            rx_ori[i] = diff / norm
-        else:
-            rx_ori[i] = np.array([1, 0, 0])
-   
-    # For the last sample, copy the orientation from the previous sample.
-    if n_samples > 1:
-        rx_ori[-1] = rx_ori[-2]
-    else:
-        rx_ori[-1] = np.array([1, 0, 0])
-   
-    return rx_pos, rx_ori
+    # Flatten to (N,3) and convert to Python lists if needed
+    poses = np.stack([xs, ys, zs], axis=-1).reshape(-1, 3)
+    return poses
