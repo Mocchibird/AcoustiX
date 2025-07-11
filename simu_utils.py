@@ -424,7 +424,8 @@ def plot_figure(ir_samples, rx_pos, tx_pos, rx_ori, tx_ori, fs):
         plt.grid(True)
         plt.show()
 
-def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs, roomname):
+def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs, 
+           original_positions=None, roomname="EmptyRoom"):
     """Function to save the impulse response samples"""
     
     # Ensure directory exists
@@ -440,7 +441,6 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs, r
         orientation_rx = rx_ori[i, :]
         position_tx = tx_pos
         orientation_tx = tx_ori
-
 
         energy, t60, C50, edt = compute_metric(ir, fs)
 
@@ -460,11 +460,11 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs, r
                  C50=C50,
                  edt=edt)
 
-        # Plotting
+        # =================== ORIGINAL PLOT ===================
         sampled_ir = ir
         fft_signal = np.fft.fft(sampled_ir)
 
-        plt.figure(figsize=(12, 12))
+        plt.figure(figsize=(12, 9))
         plt.suptitle(f"t60 = {t60:.2f}, C50 = {C50:.2f}, EDT = {edt:.2f}")
 
         plt.subplot(221)
@@ -482,19 +482,19 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs, r
         ax = plt.subplot(224, projection='3d')
         ax.set_title("Room mesh + speaker + microphones")
 
-        # --- ❶  room geometry ------------------------------------------
-        add_room_mesh(ax, f"./extract_scene/{roomname}/meshes/{roomname}.ply")        # ☜ overlay mesh
+        # Add room mesh
+        add_room_mesh(ax, "./extract_scene/EmptyRoom/meshes/EmptyRoom.ply")
 
-        # ❷ All RXs (small black dots)
+        # All RXs (small black dots)
         ax.scatter(rx_pos[:, 0], rx_pos[:, 1], rx_pos[:, 2], c="k", s=15)
         
-        # ❸ Highlight the **current** RX in red
+        # Highlight current RX in red
         ax.scatter(rx_pos[i, 0], rx_pos[i, 1], rx_pos[i, 2], c="r", s=80)
         
-        # ❹ TX in blue (already as you wanted)
+        # TX in blue
         ax.scatter(tx_pos[0], tx_pos[1], tx_pos[2], c="b", s=120)
         
-        # ❺ Orientation arrows
+        # Orientation arrows
         ax.quiver(rx_pos[:, 0], rx_pos[:, 1], rx_pos[:, 2],
                   rx_ori[:, 0], rx_ori[:, 1], rx_ori[:, 2],
                   length=0.35, color="r", linewidth=0.5)
@@ -508,6 +508,165 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs, r
 
         plt.savefig(os.path.join(rir_dir, f"{file_base}.png"))
         plt.close('all')
+
+        # =================== ADDITIONAL 4-VIEW PLOT ===================
+        if original_positions is not None:
+            create_4view_plot(rx_pos, tx_pos, position_rx, position_tx, 
+                            original_positions, rir_dir, file_base)
+
+def create_4view_plot(all_rx_pos, tx_pos, current_rx_pos, current_tx_pos, 
+                     original_positions, save_dir, file_base):
+    """Create 4-view plot with jittered positions highlighted"""
+    
+    fig = plt.figure(figsize=(16, 12))
+    fig.suptitle(f"Position Views - Current RX: [{current_rx_pos[0]:.2f}, {current_rx_pos[1]:.2f}, {current_rx_pos[2]:.2f}]", 
+                 fontsize=14)
+    
+    # Determine which positions are original vs jittered
+    original_indices = []
+    jittered_indices = []
+    
+    for idx, pos in enumerate(all_rx_pos):
+        # Check if this position is close to any original position (within small tolerance)
+        distances = np.linalg.norm(original_positions - pos, axis=1)
+        if np.min(distances) < 0.01:  # 1cm tolerance for "original"
+            original_indices.append(idx)
+        else:
+            jittered_indices.append(idx)
+    
+    # Get room bounds for consistent axis limits
+    room_bounds = {
+        'x': [np.min(all_rx_pos[:, 0]) - 0.5, np.max(all_rx_pos[:, 0]) + 0.5],
+        'y': [np.min(all_rx_pos[:, 1]) - 0.2, np.max(all_rx_pos[:, 1]) + 0.2],
+        'z': [np.min(all_rx_pos[:, 2]) - 0.5, np.max(all_rx_pos[:, 2]) + 0.5]
+    }
+    
+    # 1. Front View (looking from +X towards -X, Y-Z plane)
+    ax1 = plt.subplot(221)
+    ax1.set_title("Front View (+X → -X)")
+    
+    # Plot original positions
+    if original_indices:
+        ax1.scatter(all_rx_pos[original_indices, 1], all_rx_pos[original_indices, 2], 
+                   c="blue", s=40, alpha=0.8, label=f"Original ({len(original_indices)})")
+    
+    # Plot jittered positions
+    if jittered_indices:
+        ax1.scatter(all_rx_pos[jittered_indices, 1], all_rx_pos[jittered_indices, 2], 
+                   c="red", s=20, alpha=0.6, label=f"Jittered ({len(jittered_indices)})")
+    
+    # Highlight current RX
+    ax1.scatter(current_rx_pos[1], current_rx_pos[2], c="orange", s=100, 
+               marker="*", edgecolors="black", linewidth=2, label="Current RX")
+    
+    # TX position
+    ax1.scatter(current_tx_pos[1], current_tx_pos[2], c="green", s=120, 
+               marker="^", edgecolors="black", linewidth=2, label="TX")
+    
+    ax1.set_xlabel("Y (m)")
+    ax1.set_ylabel("Z (m)")
+    ax1.set_xlim(room_bounds['y'])
+    ax1.set_ylim(room_bounds['z'])
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(fontsize=8)
+    ax1.set_aspect('equal')
+    
+    # 2. Right View (looking from +Y towards -Y, X-Z plane)
+    ax2 = plt.subplot(222)
+    ax2.set_title("Right View (+Y → -Y)")
+    
+    # Plot original positions
+    if original_indices:
+        ax2.scatter(all_rx_pos[original_indices, 0], all_rx_pos[original_indices, 2], 
+                   c="blue", s=40, alpha=0.8, label=f"Original ({len(original_indices)})")
+    
+    # Plot jittered positions
+    if jittered_indices:
+        ax2.scatter(all_rx_pos[jittered_indices, 0], all_rx_pos[jittered_indices, 2], 
+                   c="red", s=20, alpha=0.6, label=f"Jittered ({len(jittered_indices)})")
+    
+    # Highlight current RX
+    ax2.scatter(current_rx_pos[0], current_rx_pos[2], c="orange", s=100, 
+               marker="*", edgecolors="black", linewidth=2, label="Current RX")
+    
+    # TX position
+    ax2.scatter(current_tx_pos[0], current_tx_pos[2], c="green", s=120, 
+               marker="^", edgecolors="black", linewidth=2, label="TX")
+    
+    ax2.set_xlabel("X (m)")
+    ax2.set_ylabel("Z (m)")
+    ax2.set_xlim(room_bounds['x'])
+    ax2.set_ylim(room_bounds['z'])
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(fontsize=8)
+    ax2.set_aspect('equal')
+    
+    # 3. Top View (looking from +Z towards -Z, X-Y plane)
+    ax3 = plt.subplot(223)
+    ax3.set_title("Top View (+Z → -Z)")
+    
+    # Plot original positions
+    if original_indices:
+        ax3.scatter(all_rx_pos[original_indices, 0], all_rx_pos[original_indices, 1], 
+                   c="blue", s=40, alpha=0.8, label=f"Original ({len(original_indices)})")
+    
+    # Plot jittered positions
+    if jittered_indices:
+        ax3.scatter(all_rx_pos[jittered_indices, 0], all_rx_pos[jittered_indices, 1], 
+                   c="red", s=20, alpha=0.6, label=f"Jittered ({len(jittered_indices)})")
+    
+    # Highlight current RX
+    ax3.scatter(current_rx_pos[0], current_rx_pos[1], c="orange", s=100, 
+               marker="*", edgecolors="black", linewidth=2, label="Current RX")
+    
+    # TX position
+    ax3.scatter(current_tx_pos[0], current_tx_pos[1], c="green", s=120, 
+               marker="^", edgecolors="black", linewidth=2, label="TX")
+    
+    ax3.set_xlabel("X (m)")
+    ax3.set_ylabel("Y (m)")
+    ax3.set_xlim(room_bounds['x'])
+    ax3.set_ylim(room_bounds['y'])
+    ax3.grid(True, alpha=0.3)
+    ax3.legend(fontsize=8)
+    ax3.set_aspect('equal')
+    
+    # 4. 3D Angled View (same as original but with jitter distinction)
+    ax4 = plt.subplot(224, projection='3d')
+    ax4.set_title("3D View (with jitter highlight)")
+    
+    # Plot original positions
+    if original_indices:
+        ax4.scatter(all_rx_pos[original_indices, 0], all_rx_pos[original_indices, 1], 
+                   all_rx_pos[original_indices, 2], c="blue", s=40, alpha=0.8, 
+                   label=f"Original ({len(original_indices)})")
+    
+    # Plot jittered positions
+    if jittered_indices:
+        ax4.scatter(all_rx_pos[jittered_indices, 0], all_rx_pos[jittered_indices, 1], 
+                   all_rx_pos[jittered_indices, 2], c="red", s=20, alpha=0.6, 
+                   label=f"Jittered ({len(jittered_indices)})")
+    
+    # Highlight current RX
+    ax4.scatter(current_rx_pos[0], current_rx_pos[1], current_rx_pos[2], 
+               c="orange", s=100, marker="*", edgecolors="black", linewidth=2)
+    
+    # TX position
+    ax4.scatter(current_tx_pos[0], current_tx_pos[1], current_tx_pos[2], 
+               c="green", s=120, marker="^", edgecolors="black", linewidth=2)
+    
+    ax4.set_xlabel("X (m)")
+    ax4.set_ylabel("Y (m)")
+    ax4.set_zlabel("Z (m)")
+    ax4.set_xlim(room_bounds['x'])
+    ax4.set_ylim(room_bounds['y'])
+    ax4.set_zlim(room_bounds['z'])
+    ax4.view_init(elev=20, azim=135)
+    ax4.legend(fontsize=8)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, f"{file_base}_4views.png"), dpi=150, bbox_inches='tight')
+    plt.close()
 
 def generate_rx_samples(n_random_samples, xyz_max, xyz_min):
     """ Randomly generate the rx samples with in a xyz boundary

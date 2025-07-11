@@ -69,6 +69,43 @@ def generate_orientations(num_orientations=4, mode='random'):
     
     return np.array(orientations)
 
+def apply_jitter(positions, jitter_std=0.05, num_jittered=3, xyz_min=None, xyz_max=None):
+    """Apply random jitter to grid positions
+    
+    Args:
+        positions: numpy array of original positions [N, 3]
+        jitter_std: standard deviation of jitter in meters
+        num_jittered: number of jittered positions per original position
+        xyz_min, xyz_max: room bounds to ensure jittered positions stay in bounds
+    
+    Returns:
+        jittered_positions: numpy array including original + jittered positions
+    """
+    if num_jittered == 0:
+        return positions
+    
+    original_positions = positions.copy()
+    jittered_positions = [original_positions]
+    
+    for jitter_idx in range(num_jittered):
+        # Generate random jitter for all positions
+        jitter = np.random.normal(0, jitter_std, positions.shape)
+        new_positions = original_positions + jitter
+        
+        # Clamp to room bounds if provided
+        if xyz_min is not None and xyz_max is not None:
+            new_positions = np.clip(new_positions, xyz_min, xyz_max)
+        
+        jittered_positions.append(new_positions)
+    
+    # Combine all positions
+    all_positions = np.concatenate(jittered_positions, axis=0)
+    
+    print(f"Applied jitter: {len(original_positions)} original -> {len(all_positions)} total positions")
+    print(f"Jitter parameters: std={jitter_std:.3f}m, num_jittered={num_jittered}")
+    
+    return all_positions
+
 def generate_grid_positions(xyz_min, xyz_max):
     """Generate receiver positions in a 3D grid based on config.py settings"""
     positions = []
@@ -125,7 +162,13 @@ if __name__ == '__main__':
     parser.add_argument('--tx-gen', default='Default', choices=['Default', 'Random', 'Custom'], 
                        help='transmitter generation mode')
     
-    # New orientation arguments
+    # Jitter arguments
+    parser.add_argument('--jitter', action='store_true', help='enable position jittering')
+    parser.add_argument('--jitter-std', type=float, default=0.05, help='standard deviation of jitter in meters')
+    parser.add_argument('--num-jittered', type=int, default=9, help='number of jittered positions per original position')
+    parser.add_argument('--tx-jitter', action='store_true', help='apply jitter to transmitter positions (default: only RX)')
+    
+    # Orientation arguments
     parser.add_argument('--tx-orientations', type=int, default=1, help='number of orientations per transmitter position')
     parser.add_argument('--rx-orientations', type=int, default=1, help='number of orientations per receiver position')
     parser.add_argument('--tx-ori-mode', default='random', choices=['random', 'uniform', 'cardinal'], 
@@ -148,12 +191,17 @@ if __name__ == '__main__':
     dataset_name = args.dataset_name or f'../../RIR/{args.scene}'
     scene_folder = os.path.dirname(os.path.abspath(scene_path))
     
-    # Modify output path based on rx_gen mode and orientations
+    # Modify output path based on rx_gen mode, orientations, and jitter
     if args.rx_gen == 'grid':
-        output_path = os.path.join(scene_folder, 
-                                 f"{dataset_name}_grid_{GRID_N_X}x{GRID_N_Y}x{GRID_N_Z}_tx{args.tx_orientations}_rx{args.rx_orientations}")
+        base_name = f"{dataset_name}_grid_{GRID_N_X}x{GRID_N_Y}x{GRID_N_Z}_tx{args.tx_orientations}_rx{args.rx_orientations}"
+        if args.jitter:
+            base_name += f"_jitter{args.num_jittered}_{args.jitter_std:.3f}"
+        output_path = os.path.join(scene_folder, base_name)
     else:
-        output_path = os.path.join(scene_folder, f"{dataset_name}_tx{args.tx_orientations}_rx{args.rx_orientations}")
+        base_name = f"{dataset_name}_tx{args.tx_orientations}_rx{args.rx_orientations}"
+        if args.jitter:
+            base_name += f"_jitter{args.num_jittered}_{args.jitter_std:.3f}"
+        output_path = os.path.join(scene_folder, base_name)
 
     # Setup output directory and backup config
     os.makedirs(output_path, exist_ok=True)
@@ -166,10 +214,32 @@ if __name__ == '__main__':
     xyz_min, xyz_max = get_scene_bounds(args.scene)
 
     if args.rx_gen == 'grid':
-        # Generate the same grid positions for both TX and RX
-        grid_positions = generate_grid_positions(xyz_min, xyz_max)
-        print(f"Generated {len(grid_positions)} grid positions")
+        # Generate the base grid positions
+        base_grid_positions = generate_grid_positions(xyz_min, xyz_max)
+        print(f"Generated {len(base_grid_positions)} base grid positions")
         print(f"Grid configuration: {GRID_N_X}x{GRID_N_Y}x{GRID_N_Z} = {TOTAL_NODES} positions")
+        
+        # Apply jitter to create more positions
+        if args.jitter:
+            # Add some margin to bounds for jitter clamping
+            jitter_xyz_min = np.array(xyz_min) + NODE_MARGIN/2
+            jitter_xyz_max = np.array(xyz_max) - NODE_MARGIN/2
+            
+            grid_positions = apply_jitter(
+                base_grid_positions, 
+                jitter_std=args.jitter_std, 
+                num_jittered=args.num_jittered,
+                xyz_min=jitter_xyz_min,
+                xyz_max=jitter_xyz_max
+            )
+        else:
+            grid_positions = base_grid_positions
+
+        if args.rx_gen == 'grid' and args.jitter:
+            # Store original positions for the 4-view plots
+            original_grid_positions = base_grid_positions
+        else:
+            original_grid_positions = None
         
         # Generate orientations
         tx_orientations = generate_orientations(args.tx_orientations, args.tx_ori_mode)
@@ -178,10 +248,22 @@ if __name__ == '__main__':
         print(f"TX orientations: {len(tx_orientations)}")
         print(f"RX orientations: {len(rx_orientations)}")
         
+        # Create TX positions (with optional jitter)
+        if args.tx_jitter and args.jitter:
+            tx_grid_positions = apply_jitter(
+                base_grid_positions,
+                jitter_std=args.jitter_std,
+                num_jittered=args.num_jittered,
+                xyz_min=jitter_xyz_min,
+                xyz_max=jitter_xyz_max
+            )
+        else:
+            tx_grid_positions = base_grid_positions
+        
         # Create all TX position/orientation combinations
         all_tx_poses = []
         all_tx_oris = []
-        for tx_pos in grid_positions:
+        for tx_pos in tx_grid_positions:
             for tx_ori in tx_orientations:
                 all_tx_poses.append(tx_pos)
                 all_tx_oris.append(tx_ori)
@@ -201,15 +283,40 @@ if __name__ == '__main__':
         print(f"Total RX configurations: {len(all_rx_poses)}")
         print(f"Total RIRs to generate: {len(all_tx_poses)} × {len(all_rx_poses)} = {len(all_tx_poses) * len(all_rx_poses)}")
 
-        # Save speaker data
-        speaker_data = {
+        # Save configuration including jitter info
+        config_data = {
+            "simulation_config": {
+                "scene": args.scene,
+                "rx_gen": args.rx_gen,
+                "tx_gen": args.tx_gen,
+                "grid_config": {
+                    "GRID_N_X": GRID_N_X,
+                    "GRID_N_Y": GRID_N_Y,
+                    "GRID_N_Z": GRID_N_Z,
+                    "base_positions": len(base_grid_positions)
+                },
+                "jitter_config": {
+                    "enabled": args.jitter,
+                    "jitter_std": args.jitter_std,
+                    "num_jittered": args.num_jittered,
+                    "tx_jitter": args.tx_jitter,
+                    "final_rx_positions": len(all_rx_poses),
+                    "final_tx_positions": len(all_tx_poses)
+                },
+                "orientation_config": {
+                    "tx_orientations": args.tx_orientations,
+                    "rx_orientations": args.rx_orientations,
+                    "tx_ori_mode": args.tx_ori_mode,
+                    "rx_ori_mode": args.rx_ori_mode
+                }
+            },
             "speaker": {
                 "positions": [list(pos) for pos in all_tx_poses],
                 "orientations": [list(ori) for ori in all_tx_oris]
             }
         }
-        with open(os.path.join(output_path, 'speaker_data.json'), 'w') as json_file:
-            json.dump(speaker_data, json_file, indent=4)
+        with open(os.path.join(output_path, 'simulation_config.json'), 'w') as json_file:
+            json.dump(config_data, json_file, indent=4)
 
         # Main simulation loop - for each TX, simulate to all RX positions
         rir_count = 0
@@ -241,7 +348,7 @@ if __name__ == '__main__':
             else:
                 save_ir(ir_samples=ir_time_all, rx_pos=rx_pos_used, rx_ori=rx_ori_used,
                        tx_pos=tx_pos, tx_ori=tx_ori, save_path=output_path,
-                       prefix=prefix, fs=simu_config['fs'], roomname=args.scene)
+                       prefix=prefix, fs=simu_config['fs'], roomname=args.scene, original_positions=original_grid_positions)
 
             expected_rirs = len(all_rx_poses)
             actual_rirs = len(ir_time_all)
@@ -279,6 +386,10 @@ if __name__ == '__main__':
             rx_pos, rx_ori = generate_rx_samples(n_random_samples=n_random_samples, 
                                                 xyz_max=xyz_max, xyz_min=xyz_min)
 
+            # Apply jitter to random positions if enabled
+            if args.jitter:
+                rx_pos = apply_jitter(rx_pos, args.jitter_std, args.num_jittered, xyz_min, xyz_max)
+
             # Run IR simulation
             ir_time_all, rx_pos, rx_ori = ir_simulation(
                 scene_path=scene_path, rx_pos=rx_pos, tx_pos=tx_pos,
@@ -292,4 +403,4 @@ if __name__ == '__main__':
             else:
                 save_ir(ir_samples=ir_time_all, rx_pos=rx_pos, rx_ori=rx_ori,
                        tx_pos=tx_pos, tx_ori=tx_ori, save_path=output_path,
-                       prefix=prefix, fs=simu_config['fs'], roomname=args.scene)
+                       prefix=prefix, fs=simu_config['fs'], roomname=args.scene, original_positions=original_grid_positions)
