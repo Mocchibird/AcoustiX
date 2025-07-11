@@ -10,9 +10,9 @@ ROOM_MAX = [5, 4, 1]  # X, Y, Z maximum coordinates
 #ROOM_MAX = [2.5, 2.75, 2.5]
 
 # Improved Grid Configuration
-GRID_N_X = 7  # X-axis divisions
+GRID_N_X = 3  # X-axis divisions
 GRID_N_Y = 3  # Y-axis divisions (height - fewer needed)
-GRID_N_Z = 7  # Z-axis divisions
+GRID_N_Z = 3  # Z-axis divisions
 TOTAL_NODES = GRID_N_X * GRID_N_Y * GRID_N_Z  # 147 nodes
 
 NODE_MARGIN = 0.35  # meters

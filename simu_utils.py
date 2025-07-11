@@ -424,7 +424,7 @@ def plot_figure(ir_samples, rx_pos, tx_pos, rx_ori, tx_ori, fs):
         plt.grid(True)
         plt.show()
 
-def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs):
+def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs, roomname):
     """Function to save the impulse response samples"""
     
     # Ensure directory exists
@@ -483,7 +483,7 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs):
         ax.set_title("Room mesh + speaker + microphones")
 
         # --- ❶  room geometry ------------------------------------------
-        add_room_mesh(ax, "./extract_scene/LRoom/meshes/LRoom.ply")        # ☜ overlay mesh
+        add_room_mesh(ax, f"./extract_scene/{roomname}/meshes/{roomname}.ply")        # ☜ overlay mesh
 
         # ❷ All RXs (small black dots)
         ax.scatter(rx_pos[:, 0], rx_pos[:, 1], rx_pos[:, 2], c="k", s=15)

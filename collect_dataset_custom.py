@@ -69,17 +69,17 @@ def generate_orientations(num_orientations=4, mode='random'):
     
     return np.array(orientations)
 
-def generate_grid_positions():
+def generate_grid_positions(xyz_min, xyz_max):
     """Generate receiver positions in a 3D grid based on config.py settings"""
     positions = []
     
     # Calculate actual usable space (accounting for margins)
-    usable_min_x = ROOM_MIN[0] + NODE_MARGIN
-    usable_max_x = ROOM_MAX[0] - NODE_MARGIN
-    usable_min_y = ROOM_MIN[1] + NODE_MARGIN
-    usable_max_y = ROOM_MAX[1] - NODE_MARGIN
-    usable_min_z = ROOM_MIN[2] + NODE_MARGIN
-    usable_max_z = ROOM_MAX[2] - NODE_MARGIN
+    usable_min_x = xyz_min[0] + NODE_MARGIN
+    usable_max_x = xyz_max[0] - NODE_MARGIN
+    usable_min_y = xyz_min[1] + NODE_MARGIN
+    usable_max_y = xyz_max[1] - NODE_MARGIN
+    usable_min_z = xyz_min[2] + NODE_MARGIN
+    usable_max_z = xyz_max[2] - NODE_MARGIN
     
     # Generate grid positions
     for i in range(GRID_N_X):
@@ -109,7 +109,7 @@ def get_scene_bounds(scene):
     bounds = {
         'Avonia': ([-3, -1, -6], [5, 3, 3]),
         'Montreal': ([-9, -1, -6], [2, 3, 1]),
-        'EmptyRoom': ([-3, -1, -3], [3, 4, 3]),
+        'EmptyRoom': ([-2.5, 0.25, -2.5], [2.5, 2.75, 2.5]),
         'SmallRoom': ([-2, -1, -2], [2, 2, 2]),
         'LRoom': ([-2, -1, -2], [4, 3, 2]),
     }
@@ -167,7 +167,7 @@ if __name__ == '__main__':
 
     if args.rx_gen == 'grid':
         # Generate the same grid positions for both TX and RX
-        grid_positions = generate_grid_positions()
+        grid_positions = generate_grid_positions(xyz_min, xyz_max)
         print(f"Generated {len(grid_positions)} grid positions")
         print(f"Grid configuration: {GRID_N_X}x{GRID_N_Y}x{GRID_N_Z} = {TOTAL_NODES} positions")
         
@@ -241,7 +241,7 @@ if __name__ == '__main__':
             else:
                 save_ir(ir_samples=ir_time_all, rx_pos=rx_pos_used, rx_ori=rx_ori_used,
                        tx_pos=tx_pos, tx_ori=tx_ori, save_path=output_path,
-                       prefix=prefix, fs=simu_config['fs'])
+                       prefix=prefix, fs=simu_config['fs'], roomname=args.scene)
 
             expected_rirs = len(all_rx_poses)
             actual_rirs = len(ir_time_all)
@@ -292,4 +292,4 @@ if __name__ == '__main__':
             else:
                 save_ir(ir_samples=ir_time_all, rx_pos=rx_pos, rx_ori=rx_ori,
                        tx_pos=tx_pos, tx_ori=tx_ori, save_path=output_path,
-                       prefix=prefix, fs=simu_config['fs'])
+                       prefix=prefix, fs=simu_config['fs'], roomname=args.scene)
