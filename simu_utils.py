@@ -510,13 +510,16 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs):
         plt.close('all')
 
 def generate_rx_samples(n_random_samples, xyz_max, xyz_min):
-    """ Randomly generate the rx samples with in a xyz boundary """
+    """ Randomly generate the rx samples with in a xyz boundary
+    """
     x_flat = np.random.rand(n_random_samples) * (xyz_max[0] - xyz_min[0]) + xyz_min[0]
     y_flat = np.random.rand(n_random_samples) * (xyz_max[1] - xyz_min[1]) + xyz_min[1]
     z_flat = np.random.rand(n_random_samples) * (xyz_max[2] - xyz_min[2]) + xyz_min[2]
 
     rx_pos = np.stack([x_flat, y_flat, z_flat], axis=-1)
-    rx_ori = np.random.randn(n_random_samples, 3)  # Random orientations
+    rx_ori = (np.random.rand(*rx_pos.shape) - 0.5) 
+    rx_ori[:,2] *= 0
+    rx_ori = rx_ori / np.linalg.norm(rx_ori, axis=-1, keepdims=True)
 
     return rx_pos, rx_ori
 
