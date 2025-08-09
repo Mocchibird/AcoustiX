@@ -483,7 +483,7 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs,
         ax.set_title("Room mesh + speaker + microphones")
 
         # Add room mesh
-        add_room_mesh(ax, "./extract_scene/EmptyRoom/meshes/EmptyRoom.ply")
+        add_room_mesh(ax, "./extract_scene/LRoom/meshes/LRoom.ply")
 
         # All RXs (small black dots)
         ax.scatter(rx_pos[:, 0], rx_pos[:, 1], rx_pos[:, 2], c="k", s=15)
