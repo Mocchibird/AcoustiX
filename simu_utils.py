@@ -56,30 +56,23 @@ def sanitize_position(pos):
     """Helper to convert position array into a filename-safe string"""
     return '_'.join([f"{x:.2f}" for x in pos])
 
-
 def load_cfg(config_file):
     """ Load the simulation configurations
     """
 
-
     with open(config_file, 'r') as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
-
 
     rt_config = config['rt_config']
     ir_config = config['ir_config']
 
-
     rx_pattern = Pattern(pattern_type=ir_config["rx_pattern"])
     tx_pattern = Pattern(pattern_type=ir_config["tx_pattern"])
 
-
     material_db_file = './acoustic_absorptions.json'
-
 
     with open(material_db_file, "r") as f:
         material_db = json.load(f)
-
 
     simu_config = {
         'rt_config': rt_config,
@@ -482,8 +475,53 @@ def save_ir(ir_samples, rx_pos, rx_ori, tx_pos, tx_ori, save_path, prefix, fs,
         ax = plt.subplot(224, projection='3d')
         ax.set_title("Room mesh + speaker + microphones")
 
-        # Add room mesh
-        add_room_mesh(ax, "./extract_scene/LRoom/meshes/LRoom.ply")
+        # Determine and load all mesh files for the room. Prefer meshes in ./data/{roomname}/meshes;
+        # fall back to ./extract_scene/{roomname}/meshes.  We may have multiple .ply files per room,
+        # e.g. separate walls, so load each and overlay them.  Compute global bounds across all meshes.
+        mesh_paths = []
+        candidate_dirs = [os.path.join('.', 'data', roomname, 'meshes'),
+                          os.path.join('.', 'extract_scene', roomname, 'meshes')]
+        for mdir in candidate_dirs:
+            if os.path.isdir(mdir):
+                for f in os.listdir(mdir):
+                    if f.lower().endswith('.ply'):
+                        mesh_paths.append(os.path.join(mdir, f))
+            # If meshes were found in the first candidate directory, we do not fall back
+            if mesh_paths:
+                break
+        if mesh_paths:
+            # Hold global bounds to set axis limits after loading all meshes
+            all_mins = []
+            all_maxs = []
+            for mpath in mesh_paths:
+                try:
+                    # Load mesh and draw its triangles
+                    room_mesh = trimesh.load(mpath, force='mesh')
+                    triangles = room_mesh.vertices[room_mesh.faces]  # (F, 3, 3)
+                    coll = Poly3DCollection(triangles,
+                                            facecolor='lightgrey',
+                                            edgecolor='k',
+                                            linewidth=0.1,
+                                            alpha=0.15)
+                    ax.add_collection3d(coll)
+                    # Record bounds
+                    mins, maxs = room_mesh.bounds
+                    all_mins.append(mins)
+                    all_maxs.append(maxs)
+                except Exception:
+                    # Skip any mesh that fails to load
+                    continue
+            # Set axis limits based on global bounds if any meshes were loaded
+            if all_mins:
+                try:
+                    global_min = np.min(np.stack(all_mins, axis=0), axis=0)
+                    global_max = np.max(np.stack(all_maxs, axis=0), axis=0)
+                    ax.set_xlim(global_min[0], global_max[0])
+                    ax.set_ylim(global_min[1], global_max[1])
+                    ax.set_zlim(global_min[2], global_max[2])
+                    ax.set_box_aspect(global_max - global_min)
+                except Exception:
+                    pass
 
         # All RXs (small black dots)
         ax.scatter(rx_pos[:, 0], rx_pos[:, 1], rx_pos[:, 2], c="k", s=15)
